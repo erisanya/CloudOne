@@ -32,16 +32,40 @@ A few things worth knowing rather than just claiming:
   thing, and has no state a host wouldn't expect. Test it in your DAW
   before relying on it in a session.
 
-## Building
+## Requirements
 
-You'll need [JUCE](https://github.com/juce-framework/JUCE), CMake 3.32+,
-and Visual Studio 2026 with Desktop development with C++.
+- CMake (3.22+)
+- Git (needed so CMake can fetch JUCE automatically)
+- Visual Studio Community (with the "Desktop development with C++" workload)
 
-`bash
-# Option A — you already have a local JUCE checkout:
-cmake -B build -DJUCE_DIR=/path/to/JUCE -G "Visual Studio 18 2026" -A x64
+## Building on Windows
+
+1. Unzip this project.
+2. Open the **Developer PowerShell for VS** (Start menu → your Visual Studio version)
+3. Run:
+
+```powershell
+cd C:\*YOUR-PATH*
+cmake -B build
 cmake --build build --config Release
+```
 
-# Option B — let CMake fetch JUCE for you (needs network access):
-cmake -B build -G "Visual Studio 18 2026" -A x64
-cmake --build build --config Release
+The first build will take a while — CMake's `FetchContent` downloads JUCE itself
+the first time. After that, rebuilds are much faster.
+
+**Tip:** if you hit an out-of-memory / heap error mid-build (like on HYPER SCAPE),
+try building again — sometimes it's just a low-memory moment — and consider
+closing other heavy apps (browser, DAW) while it compiles, since MSVC can be
+memory-hungry compiling JUCE's GUI code.
+
+## Output location
+
+After a successful build:
+
+- VST3: `build\CloudOne_artefacts\Release\VST3\CloudOne.vst3`
+- Standalone app: `build\CloudOne_artefacts\Release\Standalone\CloudOne.exe`
+
+Copy the `.vst3` into your DAW's VST3 folder (usually
+`C:\Program Files\Common Files\VST3`) if it isn't picked up automatically —
+`COPY_PLUGIN_AFTER_BUILD` is already set in `CMakeLists.txt` so this normally
+happens for you.
