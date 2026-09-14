@@ -1,205 +1,255 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
-// ---------------------------------------------------------------------
-// AnalogKnobLookAndFeel — back to the thin, simple ring style from the
-// first pink version: a slim track, a pink value arc, a small pointer.
-// Tick marks and their labels now sit OUTSIDE the ring on the panel,
-// like markings printed around a real hardware knob rather than on it.
-// ---------------------------------------------------------------------
-void AnalogKnobLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int width, int height,
-                                               float sliderPos, float rotaryStartAngle, float rotaryEndAngle,
-                                               juce::Slider&)
+namespace
 {
-    // The full allocated square includes room for the ring AND the tick
-    // marks/labels around it — that's why the component's bounds are
-    // sized generously by the editor, not just tight to the ring.
-    auto fullArea = juce::Rectangle<float> ((float) x, (float) y, (float) width, (float) height).reduced (2.0f);
-    auto diameter = juce::jmin (fullArea.getWidth(), fullArea.getHeight());
-    auto bounds   = juce::Rectangle<float> (diameter, diameter).withCentre (fullArea.getCentre());
-    auto radius   = diameter / 2.0f;
-    auto centre   = bounds.getCentre();
-    auto angle    = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
-
-    auto ringRadius = radius * 0.50f;
-
-    // Knob body — brighter grey than before, with a subtle gradient so
-    // it reads as a rounded surface rather than a flat disc.
-    auto knobBounds = juce::Rectangle<float> (ringRadius * 2.0f, ringRadius * 2.0f).withCentre (centre);
-    juce::ColourGradient shading (juce::Colour (0xffc4c4c4), knobBounds.getX(), knobBounds.getY(),
-                                   juce::Colour (0xff9a9a9a), knobBounds.getRight(), knobBounds.getBottom(),
-                                   false);
-    g.setGradientFill (shading);
-    g.fillEllipse (knobBounds);
-
-    // Thin outline ring around the edge — thickness unchanged.
-    g.setColour (juce::Colour (0xff2a2a2a));
-    g.drawEllipse (knobBounds, 2.0f);
-
-    // Pointer line — black now, slightly smaller, pointing at the value.
-    juce::Path pointer;
-    auto pointerLength    = ringRadius * 0.72f;
-    auto pointerThickness = 1.8f;
-    pointer.addRoundedRectangle (-pointerThickness * 0.5f, -pointerLength,
-                                  pointerThickness, pointerLength * 0.9f,
-                                  pointerThickness * 0.5f);
-    pointer.applyTransform (juce::AffineTransform::rotation (angle).translated (centre.x, centre.y));
-    g.setColour (juce::Colours::black);
-    g.fillPath (pointer);
-
-    // Tick marks — OUTSIDE the ring, on the panel, not on the knob.
-    const int numTicks = 21;
-    for (int i = 0; i < numTicks; ++i)
+class CloudOneLookAndFeel : public juce::LookAndFeel_V4
+{
+public:
+    CloudOneLookAndFeel()
     {
-        auto t         = (float) i / (float) (numTicks - 1);
-        auto tickAngle = rotaryStartAngle + t * (rotaryEndAngle - rotaryStartAngle);
-        bool isMajor   = (i == 0 || i == numTicks / 2 || i == numTicks - 1);
-
-        auto inner = centre.getPointOnCircumference (radius * 0.60f, tickAngle);
-        auto outer = centre.getPointOnCircumference (isMajor ? radius * 0.80f : radius * 0.70f, tickAngle);
-
-        g.setColour (juce::Colours::white.withAlpha (isMajor ? 0.95f : 0.5f));
-        g.drawLine ({ inner, outer }, isMajor ? 2.0f : 1.0f);
+        setColour (juce::Slider::rotarySliderFillColourId, juce::Colour (0xffff6fb0));
+        setColour (juce::Slider::rotarySliderOutlineColourId, juce::Colour (0xff3a0a22));
+        setColour (juce::Slider::thumbColourId, juce::Colour (0xffffe6f2));
+        setColour (juce::Slider::textBoxTextColourId, juce::Colour (0xffd98cb8));
+        setColour (juce::Slider::textBoxBackgroundColourId, juce::Colours::transparentBlack);
+        setColour (juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
     }
 
-    // Labels — "0" at the start, "+12" at the top (halfway point of our
-    // 0-24 range), "+24" at the end.
-    g.setFont (juce::Font (11.0f, juce::Font::bold));
-    g.setColour (juce::Colours::white.withAlpha (0.9f));
+    void drawRotarySlider (juce::Graphics& g, int x, int y, int width, int height,
+                           float sliderPos, float rotaryStartAngle, float rotaryEndAngle,
+                           juce::Slider& slider) override
+    {
+        juce::ignoreUnused (slider);
 
-    auto labelPoint = [&] (float a) { return centre.getPointOnCircumference (radius * 0.90f, a); };
+        // Leave room outside the dial body for tick marks + labels.
+        auto fullBounds = juce::Rectangle<float> ((float) x, (float) y, (float) width, (float) height);
+        auto bounds = fullBounds.reduced (fullBounds.getWidth() * 0.26f);
+        const auto centre = bounds.getCentre();
+        const float radius = juce::jmin (bounds.getWidth(), bounds.getHeight()) * 0.5f;
 
-    auto zeroPos = labelPoint (rotaryStartAngle);
-    g.drawFittedText ("0", juce::Rectangle<int> (20, 16).withCentre (zeroPos.toInt()),
-                       juce::Justification::centred, 1);
+        // Soft drop shadow.
+        g.setColour (juce::Colour (0x40000000));
+        g.fillEllipse (bounds.translated (0.0f, 5.0f));
 
-    auto midAngle = (rotaryStartAngle + rotaryEndAngle) * 0.5f;
-    auto midPos   = labelPoint (midAngle);
-    g.drawFittedText ("+12", juce::Rectangle<int> (30, 16).withCentre (midPos.toInt()),
-                       juce::Justification::centred, 1);
+        // Glossy dial body (light-from-top-left, tinted pink).
+        juce::ColourGradient knobGradient (juce::Colour (0xffffe6f2), centre.x - radius * 0.5f, centre.y - radius * 0.6f,
+                                            juce::Colour (0xff8a1054), centre.x + radius * 0.6f, centre.y + radius * 0.8f, true);
+        knobGradient.addColour (0.55, juce::Colour (0xffe087bd));
+        g.setGradientFill (knobGradient);
+        g.fillEllipse (bounds);
 
-    auto maxPos = labelPoint (rotaryEndAngle);
-    g.drawFittedText ("+24", juce::Rectangle<int> (30, 16).withCentre (maxPos.toInt()),
-                       juce::Justification::centred, 1);
+        g.setColour (juce::Colour (0xff3a0a22));
+        g.drawEllipse (bounds, 1.5f);
+
+        // Tick marks around the dial, evenly spaced from 0 to +24 dB.
+        constexpr int numTicks = 21;
+        for (int i = 0; i < numTicks; ++i)
+        {
+            const float t = static_cast<float> (i) / static_cast<float> (numTicks - 1);
+            const float tickAngle = rotaryStartAngle + t * (rotaryEndAngle - rotaryStartAngle);
+            const bool isMajor = (i == 0 || i == numTicks / 2 || i == numTicks - 1);
+
+            const float inner = radius + 5.0f;
+            const float outer = radius + (isMajor ? 13.0f : 9.0f);
+
+            juce::Point<float> p1 (centre.x + std::cos (tickAngle - juce::MathConstants<float>::halfPi) * inner,
+                                   centre.y + std::sin (tickAngle - juce::MathConstants<float>::halfPi) * inner);
+            juce::Point<float> p2 (centre.x + std::cos (tickAngle - juce::MathConstants<float>::halfPi) * outer,
+                                   centre.y + std::sin (tickAngle - juce::MathConstants<float>::halfPi) * outer);
+
+            g.setColour (isMajor ? juce::Colour (0xffffe6f2) : juce::Colour (0x99ffe6f2));
+            g.drawLine (p1.x, p1.y, p2.x, p2.y, isMajor ? 1.8f : 1.2f);
+        }
+
+        // Progress arc showing the current amount.
+        const float angle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
+        juce::Path arc;
+        arc.addCentredArc (centre.x, centre.y, radius - 4.0f, radius - 4.0f,
+                           0.0f, rotaryStartAngle, angle, true);
+        g.setColour (juce::Colour (0xffff4fa0));
+        g.strokePath (arc, juce::PathStrokeType (3.0f, juce::PathStrokeType::curved,
+                                                  juce::PathStrokeType::rounded));
+
+        // Pointer (no centre dot - just the line).
+        const float pointerLength = radius * 0.64f;
+        juce::Point<float> p (centre.x + std::cos (angle - juce::MathConstants<float>::halfPi) * pointerLength,
+                              centre.y + std::sin (angle - juce::MathConstants<float>::halfPi) * pointerLength);
+
+        g.setColour (juce::Colour (0xff3a0a22));
+        g.drawLine (centre.x, centre.y, p.x, p.y, 2.6f);
+
+        // 0 / +12 / +24 labels (this knob is a real dB gain, not a %),
+        // positioned around the dial like a gauge - same treatment/spot
+        // as the 0%/50%/100% labels on the other two plugins.
+        g.setColour (juce::Colour (0xffffe6f2));
+        g.setFont (juce::Font (juce::FontOptions (12.0f)).withTypefaceStyle ("Bold"));
+
+        auto drawLabelAt = [&] (float labelAngle, const juce::String& text)
+        {
+            const float labelRadius = radius + 22.0f;
+            juce::Point<float> lp (centre.x + std::cos (labelAngle - juce::MathConstants<float>::halfPi) * labelRadius,
+                                   centre.y + std::sin (labelAngle - juce::MathConstants<float>::halfPi) * labelRadius);
+            juce::Rectangle<float> r (lp.x - 24.0f, lp.y - 9.0f, 48.0f, 18.0f);
+            g.drawText (text, r, juce::Justification::centred);
+        };
+
+        drawLabelAt (rotaryStartAngle, "0");
+        drawLabelAt ((rotaryStartAngle + rotaryEndAngle) * 0.5f, "+12");
+        drawLabelAt (rotaryEndAngle, "+24");
+    }
+};
+
+CloudOneLookAndFeel cloudOneLaf;
+
+constexpr int kWindowWidth = 250;
+constexpr int kWindowHeight = 340;
+
+void drawScrew (juce::Graphics& g, juce::Point<float> centre)
+{
+    constexpr float r = 5.5f;
+    g.setColour (juce::Colour (0xff0c0608));
+    g.fillEllipse (centre.x - r, centre.y - r, r * 2.0f, r * 2.0f);
+    g.setColour (juce::Colour (0xff4a1030));
+    g.drawEllipse (centre.x - r, centre.y - r, r * 2.0f, r * 2.0f, 1.0f);
+    g.setColour (juce::Colour (0xff8a3060));
+    g.drawLine (centre.x - r * 0.6f, centre.y, centre.x + r * 0.6f, centre.y, 1.2f);
 }
 
-// ---------------------------------------------------------------------
-// Editor
-// ---------------------------------------------------------------------
-CloudOneAudioProcessorEditor::CloudOneAudioProcessorEditor (CloudOneAudioProcessor& p)
-    : AudioProcessorEditor (&p), processorRef (p)
+void styleCaption (juce::Label& l, const juce::String& text)
 {
-    brightnessKnob.setLookAndFeel (&knobLookAndFeel);
+    l.setText (text, juce::dontSendNotification);
+    l.setFont (juce::Font (juce::FontOptions (15.0f)).withTypefaceStyle ("Bold"));
+    l.setColour (juce::Label::textColourId, juce::Colour (0xfffbe6f2));
+    l.setJustificationType (juce::Justification::centred);
+}
+}
+
+CloudOneAudioProcessorEditor::CloudOneAudioProcessorEditor (CloudOneAudioProcessor& p)
+    : AudioProcessorEditor (&p), audioProcessor (p)
+{
+    setResizable (false, false);
+    setSize (kWindowWidth, kWindowHeight);
+
     brightnessKnob.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
-    brightnessKnob.setRotaryParameters (juce::MathConstants<float>::pi * 1.2f,
-                                         juce::MathConstants<float>::pi * 2.8f,
-                                         true);
     brightnessKnob.setTextBoxStyle (juce::Slider::NoTextBox, true, 0, 0);
+    brightnessKnob.setRange (0.0, 24.0, 0.1);
+    brightnessKnob.setLookAndFeel (&cloudOneLaf);
+    brightnessKnob.setDoubleClickReturnValue (true, 0.0);
     addAndMakeVisible (brightnessKnob);
 
+    title.setText ("CloudOne!", juce::dontSendNotification);
+    title.setFont (juce::Font (juce::FontOptions (24.0f)).withTypefaceStyle ("Bold"));
+    title.setColour (juce::Label::textColourId, juce::Colour (0xfffbe6f2));
+    title.setJustificationType (juce::Justification::centred);
+    addAndMakeVisible (title);
+
+    subtitle.setText ("by erisa", juce::dontSendNotification);
+    subtitle.setFont (juce::Font (juce::FontOptions (12.0f)).withTypefaceStyle ("Regular"));
+    subtitle.setColour (juce::Label::textColourId, juce::Colour (0xfffbe0ee));
+    subtitle.setJustificationType (juce::Justification::centred);
+    addAndMakeVisible (subtitle);
+
+    styleCaption (mixCaption, "GAIN");
+    addAndMakeVisible (mixCaption);
+
     brightnessAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
-        processorRef.parameters, CloudOneAudioProcessor::brightnessParamID, brightnessKnob);
+        audioProcessor.parameters, CloudOneAudioProcessor::brightnessParamID, brightnessKnob);
 
-    setSize (260, 330);
-
-    // Pre-generate a fixed film-grain texture sized to the actual panel
-    // (bounds reduced by 10px on each side), so it never flickers and
-    // always matches the current window size.
-    const int texW = getWidth() - 20;
-    const int texH = getHeight() - 20;
-    noiseTexture = juce::Image (juce::Image::ARGB, texW, texH, true);
-    juce::Random rng (12345);
-    juce::Image::BitmapData bitmap (noiseTexture, juce::Image::BitmapData::writeOnly);
-    for (int py = 0; py < texH; ++py)
-    {
-        for (int px = 0; px < texW; ++px)
-        {
-            auto isLight = rng.nextBool();
-            auto alpha   = rng.nextFloat() * 0.05f; // almost nothing, just grain
-            bitmap.setPixelColour (px, py, (isLight ? juce::Colours::white : juce::Colours::black)
-                                              .withAlpha (alpha));
-        }
-    }
-}
-
-CloudOneAudioProcessorEditor::~CloudOneAudioProcessorEditor()
-{
-    brightnessKnob.setLookAndFeel (nullptr);
+    startTimerHz (30);
 }
 
 void CloudOneAudioProcessorEditor::paint (juce::Graphics& g)
 {
-    auto bounds = getLocalBounds().toFloat();
+    auto b = getLocalBounds().toFloat();
 
-    // Outer dark rack bezel.
-    g.fillAll (juce::Colour (0xff0c0c0c));
+    // Outer black bezel - same bezel as HYPER SCAPE / Chocola, just a
+    // different panel colour inside it.
+    g.setColour (juce::Colour (0xff0a0a0c));
+    g.fillRoundedRectangle (b, 14.0f);
 
-    // Pink analog panel, metallic gradient top-to-bottom.
-    auto panel = bounds.reduced (10.0f);
-    juce::ColourGradient panelGradient (juce::Colour (0xffff6fb0), panel.getX(), panel.getY(),
-                                         juce::Colour (0xffb0146a), panel.getX(), panel.getBottom(),
-                                         false);
-    g.setGradientFill (panelGradient);
-    g.fillRoundedRectangle (panel, 10.0f);
+    constexpr float bezelThickness = 12.0f;
+    auto panel = b.reduced (bezelThickness);
 
-    // Subtle film-grain texture — keeps the panel from looking like a
-    // flat digital gradient, gives it that analog-hardware feel.
+    juce::ColourGradient bg (juce::Colour (0xffff6fb0), panel.getX(), panel.getY(),
+                             juce::Colour (0xffb0146a), panel.getX(), panel.getBottom(), false);
+    g.setGradientFill (bg);
+    g.fillRoundedRectangle (panel, 8.0f);
+
+    g.setColour (juce::Colour (0xff7a0f47));
+    g.drawRoundedRectangle (panel.reduced (1.0f), 8.0f, 1.2f);
+
+    // Bolts sit inside the panel with a visible gap from the true corner,
+    // like a hardware faceplate's corner mounting screws.
+    constexpr float inset = 26.0f;
+    drawScrew (g, { b.getX() + inset, b.getY() + inset });
+    drawScrew (g, { b.getRight() - inset, b.getY() + inset });
+    drawScrew (g, { b.getX() + inset, b.getBottom() - inset });
+    drawScrew (g, { b.getRight() - inset, b.getBottom() - inset });
+
+    // Small "alive" LED - brightens with the plugin's own output level,
+    // like an activity/VU light on a hardware unit.
+    const float glow = juce::jlimit (0.0f, 1.0f, ledLevel);
+    const float baseR = 3.2f;
+    const float glowR = baseR + glow * 5.0f;
+
+    if (glow > 0.02f)
     {
-        juce::Graphics::ScopedSaveState save (g);
-        juce::Path panelPath;
-        panelPath.addRoundedRectangle (panel, 10.0f);
-        g.reduceClipRegion (panelPath);
-        g.drawImageAt (noiseTexture, (int) panel.getX(), (int) panel.getY());
+        juce::ColourGradient haze (juce::Colour::fromFloatRGBA (1.0f, 0.4f, 0.7f, glow * 0.55f),
+                                   ledCentre.x, ledCentre.y,
+                                   juce::Colour::fromFloatRGBA (1.0f, 0.4f, 0.7f, 0.0f),
+                                   ledCentre.x, ledCentre.y - glowR, true);
+        haze.addColour (1.0, juce::Colour::fromFloatRGBA (1.0f, 0.4f, 0.7f, 0.0f));
+        g.setGradientFill (haze);
+        g.fillEllipse (ledCentre.x - glowR, ledCentre.y - glowR, glowR * 2.0f, glowR * 2.0f);
     }
 
-    g.setColour (juce::Colours::black.withAlpha (0.35f));
-    g.drawRoundedRectangle (panel, 10.0f, 1.5f);
-
-    // Corner screws, hardware-style.
-    auto drawScrew = [&] (float cx, float cy)
-    {
-        g.setColour (juce::Colour (0xff2a2a2a));
-        g.fillEllipse (cx - 5.0f, cy - 5.0f, 10.0f, 10.0f);
-        g.setColour (juce::Colours::white.withAlpha (0.35f));
-        g.drawLine (cx - 3.0f, cy, cx + 3.0f, cy, 1.2f);
-    };
-
-    drawScrew (panel.getX() + 16.0f, panel.getY() + 16.0f);
-    drawScrew (panel.getRight() - 16.0f, panel.getY() + 16.0f);
-    drawScrew (panel.getX() + 16.0f, panel.getBottom() - 16.0f);
-    drawScrew (panel.getRight() - 16.0f, panel.getBottom() - 16.0f);
-
-    // Title — taller-looking display font with a black outline.
-    juce::Font titleFont (28.0f, juce::Font::bold);
-    titleFont = titleFont.withHorizontalScale (0.8f);
-    g.setFont (titleFont);
-
-    const juce::String title = "CloudOne!";
-    g.setColour (juce::Colours::black);
-    for (int dx = -1; dx <= 1; ++dx)
-        for (int dy = -1; dy <= 1; ++dy)
-            if (dx != 0 || dy != 0)
-                g.drawText (title, titleBounds.translated (dx, dy), juce::Justification::centred);
-
-    g.setColour (juce::Colours::white);
-    g.drawText (title, titleBounds, juce::Justification::centred);
-
-    // "GAIN" label under the knob — plain white, no outline.
-    g.setFont (juce::Font (13.0f, juce::Font::bold));
-    g.setColour (juce::Colours::white);
-    g.drawText ("GAIN", gainLabelBounds, juce::Justification::centred);
+    const juce::Colour ledColour = juce::Colour (0xff4a1030).interpolatedWith (juce::Colour (0xffffb8dd), glow);
+    g.setColour (ledColour);
+    g.fillEllipse (ledCentre.x - baseR, ledCentre.y - baseR, baseR * 2.0f, baseR * 2.0f);
 }
 
 void CloudOneAudioProcessorEditor::resized()
 {
-    auto area = getLocalBounds().reduced (20);
-    titleBounds = area.removeFromTop (40);
-    area.removeFromTop (8);
+    auto b = getLocalBounds();
 
-    auto knobSize = juce::jmin (area.getWidth(), 210);
-    auto knobArea = area.removeFromTop (knobSize).withSizeKeepingCentre (knobSize, knobSize);
+    // Keep clear of the black bezel/outline on every side - nothing should
+    // visually touch or cross that outer line.
+    constexpr int topMargin = 30;
+    constexpr int bottomMargin = 20;
+    b.removeFromTop (topMargin);
+    b.removeFromBottom (bottomMargin);
+
+    auto top = b.removeFromTop (46);
+    title.setBounds (top.removeFromTop (30));
+    subtitle.setBounds (top.removeFromTop (14));
+
+    ledCentre = { static_cast<float> (b.getCentreX()), static_cast<float> (b.getY()) + 16.0f };
+    b.removeFromTop (10);
+
+    constexpr int knobSize = 170;
+    constexpr int captionHeight = 20;
+
+    // Centre the knob+caption block in the remaining space rather than the
+    // knob alone, so the pair reads as one unit.
+    const int knobY = b.getY() + (b.getHeight() - knobSize - captionHeight) / 2;
+
+    juce::Rectangle<int> knobArea (b.getCentreX() - knobSize / 2, knobY, knobSize, knobSize);
+
     brightnessKnob.setBounds (knobArea);
 
-    area.removeFromTop (4);
-    gainLabelBounds = area.removeFromTop (24);
+    // Tucked just under the knob (slight overlap into its own bounding
+    // box) so the label reads as part of the knob.
+    constexpr int captionOverlap = 8;
+    mixCaption.setBounds (knobArea.getX(), knobArea.getBottom() - captionOverlap, knobSize, captionHeight);
+}
+
+void CloudOneAudioProcessorEditor::timerCallback()
+{
+    const float target = audioProcessor.getOutputLevel();
+    // Fast-ish attack, slower release - reads as a natural pulse rather
+    // than a flicker.
+    const float coeff = target > ledLevel ? 0.55f : 0.12f;
+    ledLevel += (target - ledLevel) * coeff;
+    repaint();
 }

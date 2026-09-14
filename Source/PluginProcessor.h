@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
 
@@ -43,6 +44,9 @@ public:
     static constexpr const char* brightnessParamID = "brightness";
     static constexpr float shelfFrequencyHz = 8000.0f;
 
+    // 0.0 - 1.0, smoothed output level for the UI's reactive LED.
+    float getOutputLevel() const noexcept { return outputLevel.load(); }
+
 private:
     // Double precision internally: at high boost amounts, the tiny
     // rounding error in single-precision filter math gets amplified
@@ -56,6 +60,15 @@ private:
 
     double lastSampleRate = 44100.0;
     float lastGainDb = -1000.0f;
+
+    std::atomic<float> outputLevel { 0.0f };
+
+    // LED meter envelope follower - same fast-attack/slower-release +
+    // tanh gate mechanic as HYPERSCAPE's activity LED, just fed from
+    // this plugin's own output signal, so the dot reacts identically.
+    float meterEnvelope = 0.0f;
+    float meterAttackCoeff = 0.0f;
+    float meterReleaseCoeff = 0.0f;
 
     void updateFilter (float targetGainDb);
 

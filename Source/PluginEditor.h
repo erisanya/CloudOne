@@ -1,36 +1,33 @@
 #pragma once
-
-#include <juce_gui_basics/juce_gui_basics.h>
+#include <JuceHeader.h>
 #include "PluginProcessor.h"
 
-class AnalogKnobLookAndFeel : public juce::LookAndFeel_V4
-{
-public:
-    void drawRotarySlider (juce::Graphics& g, int x, int y, int width, int height,
-                           float sliderPosProportional, float rotaryStartAngle, float rotaryEndAngle,
-                           juce::Slider& slider) override;
-};
-
-class CloudOneAudioProcessorEditor : public juce::AudioProcessorEditor
+class CloudOneAudioProcessorEditor : public juce::AudioProcessorEditor,
+                                      private juce::Timer
 {
 public:
     explicit CloudOneAudioProcessorEditor (CloudOneAudioProcessor&);
-    ~CloudOneAudioProcessorEditor() override;
+    ~CloudOneAudioProcessorEditor() override = default;
 
     void paint (juce::Graphics&) override;
     void resized() override;
 
 private:
-    CloudOneAudioProcessor& processorRef;
+    void timerCallback() override;
 
-    AnalogKnobLookAndFeel knobLookAndFeel;
+    CloudOneAudioProcessor& audioProcessor;
 
     juce::Slider brightnessKnob;
-    juce::Rectangle<int> titleBounds;
-    juce::Rectangle<int> gainLabelBounds;
-    juce::Image noiseTexture;
+    juce::Label title;
+    juce::Label subtitle;
+    juce::Label mixCaption;
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> brightnessAttachment;
+
+    // Small "alive" LED that pulses with the plugin's own output level -
+    // same mechanism/look as HYPER SCAPE and Chocola, just recoloured.
+    juce::Point<float> ledCentre;
+    float ledLevel = 0.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CloudOneAudioProcessorEditor)
 };

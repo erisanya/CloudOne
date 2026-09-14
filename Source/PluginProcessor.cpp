@@ -9,10 +9,12 @@ CloudOneAudioProcessor::CloudOneAudioProcessor()
       {
           std::make_unique<juce::AudioParameterFloat> (
               juce::ParameterID { brightnessParamID, 1 },
-              "Brightness",
+              "Gain",
               juce::NormalisableRange<float> (0.0f, 24.0f, 0.1f),
               0.0f,
-              juce::AudioParameterFloatAttributes().withLabel ("dB"))
+              juce::AudioParameterFloatAttributes()
+                  .withStringFromValueFunction ([] (float value, int) { return juce::String (juce::roundToInt (value)) + " dB"; })
+                  .withValueFromStringFunction ([] (const juce::String& text) { return text.getFloatValue(); }))
       })
 {
 }
@@ -33,6 +35,12 @@ void CloudOneAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlo
 
     lastGainDb = -1000.0f; // force the first updateFilter call to actually apply
     updateFilter (*parameters.getRawParameterValue (brightnessParamID));
+
+    // Same envelope timing as HYPERSCAPE's activity LED: fast attack
+    // (~1ms), slower release (~20ms).
+    meterAttackCoeff  = std::exp (-1.0f / (static_cast<float> (sampleRate) * 0.001f));
+    meterReleaseCoeff = std::exp (-1.0f / (static_cast<float> (sampleRate) * 0.02f));
+    meterEnvelope = 0.0f;
 }
 
 void CloudOneAudioProcessor::releaseResources() {}
@@ -96,6 +104,24 @@ void CloudOneAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
         for (int i = 0; i < numSamples; ++i)
             dst[i] = (float) src[i];
     }
+
+    // Smoothed envelope for the UI's reactive LED - same fast-attack/
+    // slower-release + tanh gate mechanic as HYPERSCAPE's activity LED.
+    float lastGate = 0.0f;
+    for (int i = 0; i < numSamples; ++i)
+    {
+        float sampleSum = 0.0f;
+        for (int ch = 0; ch < numChannels; ++ch)
+            sampleSum += std::abs (buffer.getReadPointer (ch)[i]);
+        const float rectified = numChannels > 0 ? sampleSum / (float) numChannels : 0.0f;
+
+        if (rectified > meterEnvelope)
+            meterEnvelope = meterAttackCoeff * meterEnvelope + (1.0f - meterAttackCoeff) * rectified;
+        else
+            meterEnvelope = meterReleaseCoeff * meterEnvelope + (1.0f - meterReleaseCoeff) * rectified;
+        lastGate = std::tanh (meterEnvelope * 14.0f);
+    }
+    outputLevel.store (lastGate, std::memory_order_relaxed);
 }
 
 juce::AudioProcessorEditor* CloudOneAudioProcessor::createEditor()
