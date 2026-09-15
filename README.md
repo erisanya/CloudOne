@@ -1,6 +1,6 @@
 # Cloud One
 
-<img width="250" height="340" alt="image" src="https://github.com/user-attachments/assets/33429bc7-e35a-481c-9b40-6c06f08c7135" />
+<img width="250" height="340" alt="image" src="https://github.com/user-attachments/assets/981afc03-a856-45e0-8405-ab91745fe793" />
 
 A one-knob "brighter" EQ, inspired by the Waves OneKnob Brighter. Turn it up,
 things get brighter. That's the whole plugin.
