@@ -138,7 +138,7 @@ CloudOneAudioProcessorEditor::CloudOneAudioProcessorEditor (CloudOneAudioProcess
     brightnessKnob.setDoubleClickReturnValue (true, 0.0);
     addAndMakeVisible (brightnessKnob);
 
-    title.setText ("CloudOne!", juce::dontSendNotification);
+    title.setText ("CLOUDONE", juce::dontSendNotification);
     title.setFont (juce::Font (juce::FontOptions (24.0f)).withTypefaceStyle ("Bold"));
     title.setColour (juce::Label::textColourId, juce::Colour (0xfffbe6f2));
     title.setJustificationType (juce::Justification::centred);
